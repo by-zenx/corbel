@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 import { Icon } from "@/components/icons/svg-sprite";
+import { moveSegmentPill } from "@/lib/segment-motion";
 
 type SettingsTab = "profile" | "store" | "notifications" | "team" | "plan";
 type Palette = "mono" | "pastel" | "ocean" | "sage";
@@ -33,6 +34,7 @@ type TeamMember = {
 
 const SETTINGS_KEY = "corbel:settings";
 const TEAM_KEY = "corbel:settings:team";
+const DEMO_NOW = Date.UTC(2026, 9, 26, 12);
 const DEFAULT_SETTINGS: SettingsModel = {
   name: "Mara Reyes",
   email: "mara@corbelsupply.co",
@@ -168,10 +170,13 @@ export function SettingsView() {
   const tabsRef = useRef<HTMLDivElement>(null);
   const tabsPillRef = useRef<HTMLSpanElement>(null);
   const themePillRef = useRef<HTMLSpanElement>(null);
+  const tabPillPositionedRef = useRef(false);
+  const themePillPositionedRef = useRef(false);
   const inviteDialogRef = useRef<HTMLDialogElement>(null);
   const actionDialogRef = useRef<HTMLDialogElement>(null);
   const inviteInputRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState<SettingsTab>("profile");
+  const [trialEnd, setTrialEnd] = useState(DEMO_NOW + 9 * 24 * 60 * 60 * 1000);
   const [draft, setDraft] = useState<SettingsModel>(DEFAULT_SETTINGS);
   const [saved, setSaved] = useState<SettingsModel>(DEFAULT_SETTINGS);
   const [team, setTeam] = useState<TeamMember[]>(INITIAL_TEAM);
@@ -189,9 +194,8 @@ export function SettingsView() {
   const isDirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(saved), [draft, saved]);
   const seatLimit = draft.plan === "Plus" ? 25 : 10;
   const pendingCount = team.filter((member) => member.pending).length;
-  const trialEnd = useMemo(() => Date.now() + 9 * 24 * 60 * 60 * 1000, []);
-
   useEffect(() => {
+    setTrialEnd(Date.now() + 9 * 24 * 60 * 60 * 1000);
     const stored = safeRead<SettingsModel>(SETTINGS_KEY, DEFAULT_SETTINGS);
     setDraft(stored);
     setSaved(stored);
@@ -211,9 +215,8 @@ export function SettingsView() {
     const activeButton = tabsRef.current?.querySelector<HTMLElement>(`[data-tab="${activeTab}"]`);
     const pill = tabsPillRef.current;
     if (activeButton && pill && tabsRef.current) {
-      const x = activeButton.offsetLeft - 3;
-      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) gsap.set(pill, { x, width: activeButton.offsetWidth });
-      else gsap.to(pill, { x, width: activeButton.offsetWidth, duration: 0.48, ease: "elastic.out(1, 0.72)", overwrite: true });
+      moveSegmentPill(pill, activeButton, !tabPillPositionedRef.current);
+      tabPillPositionedRef.current = true;
       activeButton.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
     }
 
@@ -236,9 +239,8 @@ export function SettingsView() {
     const toggle = rootRef.current?.querySelector<HTMLElement>(".set-theme");
     const active = toggle?.querySelectorAll<HTMLButtonElement>("button")[theme === "dark" ? 1 : 0];
     if (!active || !themePillRef.current) return;
-    const x = active.offsetLeft - 3;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) gsap.set(themePillRef.current, { x, width: active.offsetWidth });
-    else gsap.to(themePillRef.current, { x, width: active.offsetWidth, duration: 0.42, ease: "elastic.out(1, 0.72)", overwrite: true });
+    moveSegmentPill(themePillRef.current, active, !themePillPositionedRef.current);
+    themePillPositionedRef.current = true;
   }, { dependencies: [theme], scope: rootRef });
 
   useEffect(() => {
@@ -579,7 +581,7 @@ export function SettingsView() {
                   {member.pending
                     ? <span className="av av--more" aria-hidden="true"><Icon name="mail" /></span>
                     : <span className="av" style={{ ["--h" as any]: member.hue }} aria-hidden="true">{initials(member.name)}</span>}
-                  <span className="set-mate__who"><b>{member.pending ? member.email : member.name}{member.role === "Owner" && <span className="set-you">You</span>}</b><small>{member.pending ? `Invited ${formatDate(member.invited ?? Date.now())}` : member.email}</small></span>
+                  <span className="set-mate__who"><b>{member.pending ? member.email : member.name}{member.role === "Owner" && <span className="set-you">You</span>}</b><small>{member.pending ? `Invited ${formatDate(member.invited ?? DEMO_NOW)}` : member.email}</small></span>
                   {member.pending && <span className="pill pill--amber">Pending</span>}
                   {member.role === "Owner" ? <span className="set-mate__role">Owner</span> : <label className="set-mate__role"><span className="sr-only">Role for {member.name}</span><select className="select" aria-label={`Role for ${member.name}`} value={member.role} onChange={(event) => saveTeam(team.map((item, i) => i === index ? { ...item, role: event.target.value } : item))}>{ROLES.map((role) => <option key={role}>{role}</option>)}</select></label>}
                   <span className="set-mate__act">
@@ -604,7 +606,7 @@ export function SettingsView() {
               <span className="set-plan__glow" aria-hidden="true" />
               <div className="set-plan__top"><span className="set-plan__ico set-plan__ico--plus"><Icon name="spark" /></span><div><h2 id="set-plus-h">Corbel Plus</h2><p className="card__sub"><b className="set-price">$79</b> a month, billed monthly</p></div>{draft.plan === "Plus" && <span className="set-badge"><Icon name="check" />You’re on Plus</span>}</div>
               <ul className="set-feats set-feats--plus">{PLUS_FEATURES.map((feature) => <li key={feature}><span className="set-feat__tick"><Icon name="check" /></span>{feature}</li>)}</ul>
-              <div className="set-plan__cta">{draft.plan === "Plus" ? <><p className="card__sub">Renews {formatDate((draft.plusSince ?? Date.now()) + 30 * 24 * 60 * 60 * 1000)} · Visa ending 4242</p><button className="btn btn--ghost btn--sm" type="button" onClick={() => setPlanAction("cancel")}>Cancel Plus</button></> : <><button className="btn btn--primary set-upgrade" type="button" onClick={() => setPlanAction("upgrade")}><Icon name="spark" />Upgrade to Plus</button><p className="card__sub">Cancel any time. Billed to Visa ending 4242.</p></>}</div>
+              <div className="set-plan__cta">{draft.plan === "Plus" ? <><p className="card__sub">Renews {formatDate((draft.plusSince ?? DEMO_NOW) + 30 * 24 * 60 * 60 * 1000)} · Visa ending 4242</p><button className="btn btn--ghost btn--sm" type="button" onClick={() => setPlanAction("cancel")}>Cancel Plus</button></> : <><button className="btn btn--primary set-upgrade" type="button" onClick={() => setPlanAction("upgrade")}><Icon name="spark" />Upgrade to Plus</button><p className="card__sub">Cancel any time. Billed to Visa ending 4242.</p></>}</div>
             </section>
           </div>
           <section className="card set-billcard" aria-labelledby="set-bill-h">

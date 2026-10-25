@@ -29,3 +29,4 @@ dialog.finder[open]::backdrop {
 .db-channel .seg__pill { will-change: transform, width; }
 .db-col__fill { transition: height 0.5s cubic-bezier(.2,.7,.2,1), background-color 0.25s; }
 .db-bar { margin-bottom: 16px; }
+.set-tabs { margin-bottom: 16px; }

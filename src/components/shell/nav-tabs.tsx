@@ -33,7 +33,7 @@ export function NavTabs() {
   const currentSegment = pathname.split("/")[1] || "dashboard";
   const activeTab = MAIN_TABS.find(
     (t) => t.route === currentSegment || t.groupedRoutes?.includes(currentSegment)
-  ) || MAIN_TABS[0];
+  );
 
   useEffect(() => {
     const track = trackRef.current;
@@ -41,7 +41,9 @@ export function NavTabs() {
     if (!track || !pill) return;
 
     const isReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const targetEl = track.querySelector<HTMLAnchorElement>(`[data-route="${activeTab.route}"]`);
+    const targetEl = activeTab
+      ? track.querySelector<HTMLAnchorElement>(`[data-route="${activeTab.route}"]`)
+      : null;
 
     if (!targetEl || !targetEl.offsetWidth) {
       gsap.to(pill, { opacity: 0, duration: 0.2, overwrite: "auto" });
@@ -103,13 +105,13 @@ export function NavTabs() {
       onComplete: settle,
     });
 
-  }, [activeTab.route, pathname]);
+  }, [activeTab?.route, pathname]);
 
   return (
     <nav className="tabs" aria-label="Primary">
       <div ref={trackRef} className="tabs__track">
         {MAIN_TABS.map((tab) => {
-          const isCurrent = tab.route === activeTab.route;
+          const isCurrent = tab.route === activeTab?.route;
           return (
             <Link
               key={tab.route}

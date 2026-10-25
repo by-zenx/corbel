@@ -81,22 +81,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             clearProps: "transform,opacity",
           },
           0.08
-        )
-        .fromTo(
-          ".live",
-          { opacity: 0, y: -10, scale: 0.88 },
-          {
-            opacity: 1,
-            y: 0,
-            scale: 1,
-            duration: 0.65,
-            ease: "back.out(2)",
-            clearProps: "transform,opacity",
-          },
-          0.35
         );
     },
-    { scope: shellRef }
+    // The shell entrance is for the initial site load only. Route children
+    // change inside this persistent component and must not replay the intro.
+    { scope: shellRef, dependencies: [] }
   );
 
   return (

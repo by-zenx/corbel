@@ -13,6 +13,7 @@ import {
   HEATMAP_GRID,
   DEVICE_VISITS,
 } from "@/data/dashboard-data";
+import { moveSegmentPill } from "@/lib/segment-motion";
 
 function formatKpiValue(index: number, value: number) {
   if (index < 2) return `$${Math.round(value).toLocaleString("en-US")}`;
@@ -24,10 +25,10 @@ export function DashboardView() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [channel, setChannel] = useState<"all" | "online" | "store">("all");
   const [activeMonthIndex, setActiveMonthIndex] = useState<number | null>(9); // Oct
-  const [scoreVal, setScoreVal] = useState<number>(0);
 
   const gaugeArcRef = useRef<SVGPathElement>(null);
   const gaugeKnobRef = useRef<SVGGElement>(null);
+  const scoreValueRef = useRef<HTMLElement>(null);
   const ringRef = useRef<SVGCircleElement>(null);
   const ringPctRef = useRef<HTMLElement>(null);
   const sparkLineRef = useRef<SVGPathElement>(null);
@@ -55,7 +56,7 @@ export function DashboardView() {
     () => {
       const isReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       if (isReduced) {
-        setScoreVal(84);
+        if (scoreValueRef.current) scoreValueRef.current.textContent = "84";
         if (gaugeArcRef.current) gaugeArcRef.current.style.strokeDasharray = "84 100";
         if (ringRef.current) ringRef.current.style.strokeDasharray = "86 100";
         if (ringPctRef.current) ringPctRef.current.textContent = "86%";
@@ -108,7 +109,7 @@ export function DashboardView() {
         ease: "power3.inOut",
         onUpdate: () => {
           const current = Math.round(scoreObj.val);
-          setScoreVal(current);
+          if (scoreValueRef.current) scoreValueRef.current.textContent = String(current);
 
           if (gaugeArcRef.current) {
             gaugeArcRef.current.style.strokeDasharray = `${scoreObj.val} 100`;
@@ -231,14 +232,7 @@ export function DashboardView() {
     const tabs = containerRef.current?.querySelector<HTMLElement>(".db-bar .seg");
     const active = tabs?.querySelector<HTMLElement>('button[aria-selected="true"]');
     if (!pill || !tabs || !active) return;
-    const x = active.offsetLeft - 3;
-    const width = active.offsetWidth;
-    const isReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (isReduced || isInitial) {
-      gsap.set(pill, { x, width });
-    } else {
-      gsap.to(pill, { x, width, duration: 0.48, ease: "elastic.out(1, 0.72)", overwrite: true });
-    }
+    moveSegmentPill(pill, active, isInitial);
 
     const valueElements = containerRef.current?.querySelectorAll<HTMLElement>(".db-kpi .stat__val");
     valueElements?.forEach((el, index) => {
@@ -469,7 +463,7 @@ export function DashboardView() {
 
           <div className="db-gauge">
             <svg viewBox="0 0 240 136" role="img" aria-labelledby="db-gauge-sr">
-              <title id="db-gauge-sr">Sales score: {scoreVal} of 100 points</title>
+              <title id="db-gauge-sr">Sales score: 84 of 100 points</title>
               <defs>
                 <linearGradient id="db-gauge-g" x1="0" x2="1" y1="0" y2="0">
                   <stop offset="0" style={{ stopColor: "var(--c2)" }} />
@@ -497,7 +491,7 @@ export function DashboardView() {
             </svg>
             <div className="db-gauge__c">
               <p>
-                <b>{scoreVal}</b>
+                <b ref={scoreValueRef}>0</b>
                 <span className="delta">
                   <Icon name="arrow-up" />
                   +6

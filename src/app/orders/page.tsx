@@ -1,16 +1,11 @@
 import { PageHeading } from "@/components/shell/page-heading";
-import { SectionPlaceholder } from "@/components/ui/section-placeholder";
+import { OrdersView } from "@/components/orders/orders-view";
 
 export default function OrdersPage() {
   return (
     <>
       <PageHeading title="Orders" />
-      <SectionPlaceholder
-        viewName="orders"
-        title="Order Management"
-        description="Browse orders across online and in-store channels, track fulfillment status, and inspect customer order slips."
-        icon="cart"
-      />
+      <OrdersView />
     </>
   );
 }
