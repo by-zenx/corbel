@@ -1,0 +1,17 @@
+@import "./fonts.css";
+@import "./corbel-global.css";
+
+/* View-scoped styles: naturally scoped via [data-view="..."] */
+@import "./views/dashboard.css";
+@import "./views/products.css";
+@import "./views/orders.css";
+@import "./views/customers.css";
+@import "./views/messages.css";
+@import "./views/email.css";
+@import "./views/automations.css";
+@import "./views/analytics.css";
+@import "./views/integrations.css";
+@import "./views/workspace.css";
+@import "./views/help.css";
+@import "./views/feedback.css";
+@import "./views/settings.css";
