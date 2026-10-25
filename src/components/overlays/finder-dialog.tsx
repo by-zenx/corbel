@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import gsap from "gsap";
 import { Icon } from "@/components/icons/svg-sprite";
 
 interface FinderItem {
@@ -42,13 +43,27 @@ export function FinderDialog({
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
 
+  const showFinder = () => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    if (!dialog.open) dialog.showModal();
+    const box = dialog.querySelector<HTMLElement>(".finder__box");
+    if (box && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      gsap.fromTo(
+        box,
+        { opacity: 0, y: -14, scale: 0.97, transformOrigin: "50% 0%" },
+        { opacity: 1, y: 0, scale: 1, duration: 0.42, ease: "power3.out", overwrite: true }
+      );
+    }
+  };
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         if (isOpen) onClose();
         else {
-          dialogRef.current?.showModal();
+          showFinder();
         }
       }
     };
@@ -61,7 +76,7 @@ export function FinderDialog({
     if (!dialog) return;
 
     if (isOpen) {
-      if (!dialog.open) dialog.showModal();
+      showFinder();
       inputRef.current?.focus();
     } else {
       if (dialog.open) dialog.close();

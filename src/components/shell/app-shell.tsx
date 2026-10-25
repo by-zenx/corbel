@@ -105,6 +105,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <div className="app">
         <TopHeader
+          isNotificationsOpen={isBellOpen}
           onOpenNotifications={() => setIsBellOpen((prev) => !prev)}
         />
 

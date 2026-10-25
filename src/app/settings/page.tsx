@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AppShell } from "@/components/shell/app-shell";
 import { PageHeading } from "@/components/shell/page-heading";
 
 type Palette = "mono" | "pastel" | "ocean" | "sage";
@@ -35,7 +34,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <AppShell>
+    <>
       <PageHeading title="Settings" />
 
       <div data-view="settings">
@@ -130,6 +129,6 @@ export default function SettingsPage() {
           </div>
         </section>
       </div>
-    </AppShell>
+    </>
   );
 }

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "@/styles/globals.css";
 import { SvgSprite } from "@/components/icons/svg-sprite";
+import { AppShell } from "@/components/shell/app-shell";
 
 export const metadata: Metadata = {
   title: "Corbel — sales dashboard for an online and in-store shop",
@@ -54,7 +55,7 @@ export default function RootLayout({
         <a className="skip" href="#main">
           Skip to content
         </a>
-        {children}
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );

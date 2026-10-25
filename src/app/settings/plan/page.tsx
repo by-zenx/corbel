@@ -1,11 +1,10 @@
 import Link from "next/link";
-import { AppShell } from "@/components/shell/app-shell";
 import { PageHeading } from "@/components/shell/page-heading";
 import { Icon } from "@/components/icons/svg-sprite";
 
 export default function PlanPage() {
   return (
-    <AppShell>
+    <>
       <PageHeading title="Upgrade to Corbel Plus" />
 
       <div data-view="settings">
@@ -54,6 +53,6 @@ export default function PlanPage() {
           </div>
         </section>
       </div>
-    </AppShell>
+    </>
   );
 }

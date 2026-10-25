@@ -27,7 +27,7 @@ export function NavTabs() {
   const pathname = usePathname();
   const trackRef = useRef<HTMLDivElement>(null);
   const pillRef = useRef<HTMLSpanElement>(null);
-  const prevCoords = useRef<{ l: number; r: number } | null>(null);
+  const coordsRef = useRef<{ l: number; r: number } | null>(null);
 
   // Determine active route name
   const currentSegment = pathname.split("/")[1] || "dashboard";
@@ -45,7 +45,7 @@ export function NavTabs() {
 
     if (!targetEl || !targetEl.offsetWidth) {
       gsap.to(pill, { opacity: 0, duration: 0.2, overwrite: "auto" });
-      prevCoords.current = null;
+      coordsRef.current = null;
       return;
     }
 
@@ -59,16 +59,30 @@ export function NavTabs() {
     const makeClip = (l: number, r: number) =>
       `inset(${top}px ${r}px ${bottom}px ${l}px round 999px)`;
 
-    if (!prevCoords.current || isReduced) {
+    if (!coordsRef.current || isReduced) {
       gsap.set(pill, { clipPath: makeClip(left, right) });
       gsap.to(pill, { opacity: 1, duration: 0.2, overwrite: "auto" });
-      prevCoords.current = { l: left, r: right };
+      coordsRef.current = { l: left, r: right };
       return;
     }
 
-    const movingRight = left > prevCoords.current.l;
-    const coords = { ...prevCoords.current };
+    const coords = coordsRef.current;
+    if (!coords) return;
+    const movingRight = left > coords.l;
     gsap.killTweensOf(coords);
+    const updateClip = () => gsap.set(pill, { clipPath: makeClip(coords.l, coords.r) });
+    let completedEdges = 0;
+    const settle = () => {
+      completedEdges += 1;
+      if (completedEdges !== 2) return;
+      gsap.to(coords, {
+        l: left,
+        r: right,
+        duration: 0.18,
+        ease: "back.out(1.35)",
+        onUpdate: updateClip,
+      });
+    };
 
     gsap.to(pill, { opacity: 1, duration: 0.2, overwrite: "auto" });
 
@@ -77,17 +91,18 @@ export function NavTabs() {
       l: left,
       duration: movingRight ? 0.55 : 0.36,
       ease: movingRight ? "power3.inOut" : "power3.out",
-      onUpdate: () => gsap.set(pill, { clipPath: makeClip(coords.l, coords.r) }),
+      onUpdate: updateClip,
+      onComplete: settle,
     });
 
     gsap.to(coords, {
       r: right,
       duration: movingRight ? 0.36 : 0.55,
       ease: movingRight ? "power3.out" : "power3.inOut",
-      onUpdate: () => gsap.set(pill, { clipPath: makeClip(coords.l, coords.r) }),
+      onUpdate: updateClip,
+      onComplete: settle,
     });
 
-    prevCoords.current = { l: left, r: right };
   }, [activeTab.route, pathname]);
 
   return (

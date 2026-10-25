@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import gsap from "gsap";
+import { useGSAP } from "@gsap/react";
 import { Icon } from "@/components/icons/svg-sprite";
 
 export interface NotificationItem {
@@ -27,6 +29,19 @@ export function BellPopover({
 }) {
   const [items, setItems] = useState<NotificationItem[]>(INITIAL_NOTIFICATIONS);
   const popRef = useRef<HTMLDivElement>(null);
+
+  useGSAP(
+    () => {
+      const pop = popRef.current;
+      if (!isOpen || !pop || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      gsap.fromTo(
+        pop,
+        { opacity: 0, y: -10, scale: 0.97, transformOrigin: "100% 0%" },
+        { opacity: 1, y: 0, scale: 1, duration: 0.36, ease: "power3.out", overwrite: true }
+      );
+    },
+    { dependencies: [isOpen], revertOnUpdate: true }
+  );
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {

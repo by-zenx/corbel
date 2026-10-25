@@ -6,10 +6,11 @@ import { NavTabs } from "./nav-tabs";
 
 interface TopHeaderProps {
   onOpenNotifications?: () => void;
+  isNotificationsOpen?: boolean;
   hasUnread?: boolean;
 }
 
-export function TopHeader({ onOpenNotifications, hasUnread = true }: TopHeaderProps) {
+export function TopHeader({ onOpenNotifications, isNotificationsOpen = false, hasUnread = true }: TopHeaderProps) {
   return (
     <header className="top">
       <Link className="brand" href="/dashboard" aria-label="Corbel: dashboard">
@@ -31,7 +32,7 @@ export function TopHeader({ onOpenNotifications, hasUnread = true }: TopHeaderPr
           id="bell-btn"
           aria-label="Notifications"
           aria-haspopup="dialog"
-          aria-expanded="false"
+          aria-expanded={isNotificationsOpen}
           onClick={onOpenNotifications}
         >
           <Icon name="bell" />

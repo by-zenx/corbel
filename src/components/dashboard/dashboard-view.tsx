@@ -25,12 +25,37 @@ export function DashboardView() {
   const ringRef = useRef<SVGCircleElement>(null);
   const ringPctRef = useRef<HTMLElement>(null);
   const sparkLineRef = useRef<SVGPathElement>(null);
+  const channelPillRef = useRef<HTMLSpanElement>(null);
+  const visitsTotalRef = useRef<HTMLElement>(null);
+  const visitsValueRef = useRef({ value: 0 });
+  const previousChannelRef = useRef<"all" | "online" | "store" | null>(null);
+
+  const channelValues = {
+    all: ["$18,420", "$142,860", "1,284", "3.42%"],
+    online: ["$11,760", "$96,840", "842", "3.76%"],
+    store: ["$6,660", "$46,020", "442", "2.81%"],
+  }[channel];
+  const revenueFactor = channel === "online" ? 0.68 : channel === "store" ? 0.32 : 1;
+  const channelRevenue = MONTHLY_REVENUE.map((item) => ({
+    ...item,
+    val: Math.round(item.val * revenueFactor),
+  }));
+  const visitsTotal = channel === "online" ? "32.7K" : channel === "store" ? "15.5K" : "48.2K";
 
   const N = 31; // total ticks
 
   useGSAP(
     () => {
       const isReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (isReduced) {
+        setScoreVal(84);
+        if (gaugeArcRef.current) gaugeArcRef.current.style.strokeDasharray = "84 100";
+        if (ringRef.current) ringRef.current.style.strokeDasharray = "86 100";
+        if (ringPctRef.current) ringPctRef.current.textContent = "86%";
+        visitsValueRef.current.value = Number(visitsTotal.replace("K", "")) * 1000;
+        if (visitsTotalRef.current) visitsTotalRef.current.textContent = visitsTotal;
+        return;
+      }
 
       // 1. Cards staggered entrance (Corbel xi helper)
       gsap.fromTo(
@@ -62,14 +87,6 @@ export function DashboardView() {
           clearProps: "transform,opacity",
         }
       );
-
-      if (isReduced) {
-        setScoreVal(84);
-        if (gaugeArcRef.current) gaugeArcRef.current.style.strokeDasharray = "84 100";
-        if (ringRef.current) ringRef.current.style.strokeDasharray = "86 100";
-        if (ringPctRef.current) ringPctRef.current.textContent = "86%";
-        return;
-      }
 
       // 3. Sales Score Gauge animation: score count 0 -> 84 & arc 0 -> 84 & ticks
       const scoreObj = { val: 0 };
@@ -161,9 +178,86 @@ export function DashboardView() {
           ease: "back.out(1.5)",
         }
       );
+
+      gsap.fromTo(
+        ".db-col__fill",
+        { scaleY: 0, transformOrigin: "50% 100%" },
+        { scaleY: 1, duration: 0.7, ease: "expo.out", stagger: 0.045, delay: 0.25 }
+      );
+      gsap.fromTo(
+        ".db-cell i",
+        { opacity: 0, scale: 0.72, transformOrigin: "50% 50%" },
+        { opacity: 1, scale: 1, duration: 0.45, ease: "back.out(1.7)", stagger: 0.018, delay: 0.35 }
+      );
+      const donutSegments = gsap.utils.toArray<SVGCircleElement>(".db-seg");
+      donutSegments.forEach((segment, index) => {
+        const dash = segment.style.strokeDasharray;
+        gsap.fromTo(segment, { strokeDasharray: "0 100", opacity: 0 }, {
+          strokeDasharray: dash, opacity: 1, duration: 1.1, delay: index * 0.1, ease: "power3.out",
+        });
+      });
+      const end = Number(visitsTotal.replace("K", "")) * 1000;
+      visitsValueRef.current.value = 0;
+      if (visitsTotalRef.current) visitsTotalRef.current.textContent = "0.0K";
+      gsap.to(visitsValueRef.current, {
+        value: end,
+        duration: 1.1,
+        delay: 0.3,
+        ease: "power3.out",
+        onUpdate: () => {
+          if (visitsTotalRef.current) {
+            visitsTotalRef.current.textContent = `${(visitsValueRef.current.value / 1000).toFixed(1)}K`;
+          }
+        },
+      });
     },
     { scope: containerRef }
   );
+
+  useGSAP(() => {
+    if (previousChannelRef.current === null) {
+      previousChannelRef.current = channel;
+      return;
+    }
+
+    const pill = channelPillRef.current;
+    const tabs = containerRef.current?.querySelector<HTMLElement>(".db-bar .seg");
+    const active = tabs?.querySelector<HTMLElement>('button[aria-selected="true"]');
+    if (!pill || !tabs || !active) return;
+    const x = active.offsetLeft - 3;
+    const width = active.offsetWidth;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      gsap.set(pill, { x, width });
+    } else {
+      gsap.to(pill, { x, width, duration: 0.48, ease: "elastic.out(1, 0.72)", overwrite: true });
+    }
+
+    const channelEnd = Number(visitsTotal.replace("K", "")) * 1000;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      visitsValueRef.current.value = channelEnd;
+      if (visitsTotalRef.current) visitsTotalRef.current.textContent = visitsTotal;
+    } else {
+      gsap.to(visitsValueRef.current, {
+        value: channelEnd,
+        duration: 0.65,
+        ease: "power3.out",
+        overwrite: true,
+        onUpdate: () => {
+          if (visitsTotalRef.current) {
+            visitsTotalRef.current.textContent = `${(visitsValueRef.current.value / 1000).toFixed(1)}K`;
+          }
+        },
+      });
+    }
+    if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      gsap.fromTo(
+        gsap.utils.toArray<HTMLElement>(".db-kpi .stat__val"),
+        { opacity: 0.55, y: 5 },
+        { opacity: 1, y: 0, duration: 0.36, ease: "power3.out", stagger: 0.035, clearProps: "transform,opacity" }
+      );
+    }
+    previousChannelRef.current = channel;
+  }, { dependencies: [channel], scope: containerRef });
 
   // Generate 31 ticks along semi-circle
   const gaugeTicks = Array.from({ length: N }, (_, t) => {
@@ -188,9 +282,12 @@ export function DashboardView() {
     <div ref={containerRef} data-view="dashboard">
       {/* Top Toolbar */}
       <div className="toolbar db-bar">
-        <div className="seg" role="tablist" aria-label="Sales channel">
+        <div className="seg db-channel" role="tablist" aria-label="Sales channel">
+          <span ref={channelPillRef} className="seg__pill" aria-hidden="true" />
           <button
             type="button"
+            role="tab"
+            aria-controls="db-board"
             aria-selected={channel === "all"}
             onClick={() => setChannel("all")}
           >
@@ -198,6 +295,8 @@ export function DashboardView() {
           </button>
           <button
             type="button"
+            role="tab"
+            aria-controls="db-board"
             aria-selected={channel === "online"}
             onClick={() => setChannel("online")}
           >
@@ -205,6 +304,8 @@ export function DashboardView() {
           </button>
           <button
             type="button"
+            role="tab"
+            aria-controls="db-board"
             aria-selected={channel === "store"}
             onClick={() => setChannel("store")}
           >
@@ -233,8 +334,8 @@ export function DashboardView() {
       <div className="db" id="db-board" role="tabpanel" aria-label="Overview">
         {/* KPI Cards Row */}
         <section className="card db-kpis" aria-label="Key figures">
-          {DASHBOARD_KPIS.map((kpi) => (
-            <div key={kpi.id} className="db-kpi">
+          {DASHBOARD_KPIS.map((kpi, index) => (
+            <div key={kpi.id} className={`db-kpi tile--${["sky", "mint", "lemon", "coral"][index]}`}>
               <div className="db-kpi__row">
                 <div className="db-kpi__fig">
                   <div className="stat__label">
@@ -249,7 +350,7 @@ export function DashboardView() {
                       <Icon name="info" />
                     </span>
                   </div>
-                  <b className="stat__val">{kpi.val}</b>
+                  <b className="stat__val">{channelValues[index]}</b>
                   <div className="stat__meta">
                     <span className="delta">
                       <Icon name="arrow-up" />
@@ -406,7 +507,9 @@ export function DashboardView() {
                 <Icon name="info" />
               </span>
             </h2>
-            <span className="db-an__sum">$1,458,720 YTD</span>
+            <span className="db-an__sum">
+              ${Math.round(1_458_720 * revenueFactor).toLocaleString("en-US")} YTD
+            </span>
             <div className="card__actions">
               <div className="seg seg--sm" role="group" aria-label="Year">
                 <button type="button">2025</button>
@@ -433,7 +536,7 @@ export function DashboardView() {
 
               {/* 12 Month Column Bars */}
               <div className="db-cols">
-                {MONTHLY_REVENUE.map((item, idx) => {
+                {channelRevenue.map((item, idx) => {
                   const heightPct = Math.round((item.val / item.max) * 100);
                   const isHovered = activeMonthIndex === idx;
 
@@ -494,7 +597,7 @@ export function DashboardView() {
                   <dl>
                     <div>
                       <dt>Revenue</dt>
-                      <dd>${(MONTHLY_REVENUE[activeMonthIndex].val / 1000).toFixed(1)}K</dd>
+                      <dd>${(channelRevenue[activeMonthIndex].val / 1000).toFixed(1)}K</dd>
                     </div>
                     <div>
                       <dt>vs Target</dt>
@@ -547,11 +650,18 @@ export function DashboardView() {
             {HEATMAP_PERIODS.map((period, pIdx) => (
               <div key={period} style={{ display: "contents" }}>
                 <span className="db-heat__p">{period}</span>
-                {HEATMAP_GRID[pIdx].map((lvl, dIdx) => (
-                  <div key={dIdx} className="db-cell">
-                    <i style={{ background: `var(--heat-${lvl})` }} />
-                  </div>
-                ))}
+                {HEATMAP_GRID[pIdx].map((baseLevel, dIdx) => {
+                  const lvl = channel === "online"
+                    ? Math.min(4, baseLevel + (pIdx === 1 || pIdx === 2 ? 1 : 0))
+                    : channel === "store"
+                      ? Math.max(0, baseLevel + (dIdx >= 5 ? 1 : -1))
+                      : baseLevel;
+                  return (
+                    <div key={dIdx} className="db-cell">
+                      <i style={{ background: `var(--heat-${lvl})` }} />
+                    </div>
+                  );
+                })}
               </div>
             ))}
           </div>
@@ -617,7 +727,7 @@ export function DashboardView() {
                 />
               </svg>
               <div className="db-donut__c">
-                <b>48.2K</b>
+                <b ref={visitsTotalRef}>{visitsTotal}</b>
                 <small>total visits</small>
               </div>
             </div>

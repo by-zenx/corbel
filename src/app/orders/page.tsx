@@ -1,10 +1,9 @@
-import { AppShell } from "@/components/shell/app-shell";
 import { PageHeading } from "@/components/shell/page-heading";
 import { SectionPlaceholder } from "@/components/ui/section-placeholder";
 
 export default function OrdersPage() {
   return (
-    <AppShell>
+    <>
       <PageHeading title="Orders" />
       <SectionPlaceholder
         viewName="orders"
@@ -12,6 +11,6 @@ export default function OrdersPage() {
         description="Browse orders across online and in-store channels, track fulfillment status, and inspect customer order slips."
         icon="cart"
       />
-    </AppShell>
+    </>
   );
 }
