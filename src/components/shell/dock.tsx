@@ -15,8 +15,13 @@ export function Dock({ onOpenFinder, workspaceCount = 12 }: DockProps) {
   const [theme, setTheme] = useState<"light" | "dark">("light");
 
   useEffect(() => {
-    const currentTheme = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
-    setTheme(currentTheme);
+    const syncTheme = () => {
+      setTheme(document.documentElement.dataset.theme === "dark" ? "dark" : "light");
+    };
+    syncTheme();
+    const observer = new MutationObserver(syncTheme);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => observer.disconnect();
   }, []);
 
   const toggleTheme = () => {

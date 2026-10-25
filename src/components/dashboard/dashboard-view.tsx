@@ -14,6 +14,12 @@ import {
   DEVICE_VISITS,
 } from "@/data/dashboard-data";
 
+function formatKpiValue(index: number, value: number) {
+  if (index < 2) return `$${Math.round(value).toLocaleString("en-US")}`;
+  if (index === 2) return Math.round(value).toLocaleString("en-US");
+  return `${value.toFixed(2)}%`;
+}
+
 export function DashboardView() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [channel, setChannel] = useState<"all" | "online" | "store">("all");
@@ -28,12 +34,13 @@ export function DashboardView() {
   const channelPillRef = useRef<HTMLSpanElement>(null);
   const visitsTotalRef = useRef<HTMLElement>(null);
   const visitsValueRef = useRef({ value: 0 });
+  const kpiValueRefs = useRef([{ value: 0 }, { value: 0 }, { value: 0 }, { value: 0 }]);
   const previousChannelRef = useRef<"all" | "online" | "store" | null>(null);
 
-  const channelValues = {
-    all: ["$18,420", "$142,860", "1,284", "3.42%"],
-    online: ["$11,760", "$96,840", "842", "3.76%"],
-    store: ["$6,660", "$46,020", "442", "2.81%"],
+  const channelTargets = {
+    all: [18420, 142860, 1284, 3.42],
+    online: [11760, 96840, 842, 3.76],
+    store: [6660, 46020, 442, 2.81],
   }[channel];
   const revenueFactor = channel === "online" ? 0.68 : channel === "store" ? 0.32 : 1;
   const channelRevenue = MONTHLY_REVENUE.map((item) => ({
@@ -54,6 +61,10 @@ export function DashboardView() {
         if (ringPctRef.current) ringPctRef.current.textContent = "86%";
         visitsValueRef.current.value = Number(visitsTotal.replace("K", "")) * 1000;
         if (visitsTotalRef.current) visitsTotalRef.current.textContent = visitsTotal;
+        containerRef.current?.querySelectorAll<HTMLElement>(".db-kpi .stat__val").forEach((el, index) => {
+          kpiValueRefs.current[index].value = channelTargets[index];
+          el.textContent = formatKpiValue(index, channelTargets[index]);
+        });
         return;
       }
 
@@ -215,28 +226,49 @@ export function DashboardView() {
   );
 
   useGSAP(() => {
-    if (previousChannelRef.current === null) {
-      previousChannelRef.current = channel;
-      return;
-    }
-
+    const isInitial = previousChannelRef.current === null;
     const pill = channelPillRef.current;
     const tabs = containerRef.current?.querySelector<HTMLElement>(".db-bar .seg");
     const active = tabs?.querySelector<HTMLElement>('button[aria-selected="true"]');
     if (!pill || !tabs || !active) return;
     const x = active.offsetLeft - 3;
     const width = active.offsetWidth;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    const isReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (isReduced || isInitial) {
       gsap.set(pill, { x, width });
     } else {
       gsap.to(pill, { x, width, duration: 0.48, ease: "elastic.out(1, 0.72)", overwrite: true });
     }
 
+    const valueElements = containerRef.current?.querySelectorAll<HTMLElement>(".db-kpi .stat__val");
+    valueElements?.forEach((el, index) => {
+      const target = channelTargets[index];
+      if (isReduced) {
+        kpiValueRefs.current[index].value = target;
+        el.textContent = formatKpiValue(index, target);
+      } else {
+        el.textContent = formatKpiValue(index, kpiValueRefs.current[index].value);
+        gsap.to(kpiValueRefs.current[index], {
+          value: target,
+          duration: isInitial ? 1.25 : 0.95,
+          delay: isInitial ? index * 0.06 : 0,
+          ease: "power3.out",
+          overwrite: true,
+          onUpdate: () => {
+            el.textContent = formatKpiValue(index, kpiValueRefs.current[index].value);
+          },
+        });
+      }
+    });
+
     const channelEnd = Number(visitsTotal.replace("K", "")) * 1000;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    if (isReduced) {
       visitsValueRef.current.value = channelEnd;
       if (visitsTotalRef.current) visitsTotalRef.current.textContent = visitsTotal;
-    } else {
+    } else if (!isInitial) {
+      if (visitsTotalRef.current) {
+        visitsTotalRef.current.textContent = `${(visitsValueRef.current.value / 1000).toFixed(1)}K`;
+      }
       gsap.to(visitsValueRef.current, {
         value: channelEnd,
         duration: 0.65,
@@ -248,13 +280,6 @@ export function DashboardView() {
           }
         },
       });
-    }
-    if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      gsap.fromTo(
-        gsap.utils.toArray<HTMLElement>(".db-kpi .stat__val"),
-        { opacity: 0.55, y: 5 },
-        { opacity: 1, y: 0, duration: 0.36, ease: "power3.out", stagger: 0.035, clearProps: "transform,opacity" }
-      );
     }
     previousChannelRef.current = channel;
   }, { dependencies: [channel], scope: containerRef });
@@ -350,7 +375,7 @@ export function DashboardView() {
                       <Icon name="info" />
                     </span>
                   </div>
-                  <b className="stat__val">{channelValues[index]}</b>
+                  <b className="stat__val">{formatKpiValue(index, channelTargets[index])}</b>
                   <div className="stat__meta">
                     <span className="delta">
                       <Icon name="arrow-up" />
