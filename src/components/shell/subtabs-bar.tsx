@@ -56,9 +56,8 @@ const SUBTAB_GROUPS: Record<string, SubtabConfig> = {
   workspace: {
     key: "workspace",
     items: [
-      { href: "/workspace", label: "Brand refresh", key: "w1" },
-      { href: "/workspace/w2", label: "Retail store launch", key: "w2" },
-      { href: "/workspace/w3", label: "Summer pop-up", key: "w3" },
+      { href: "/workspace/spring-launch", label: "Spring Launch", key: "spring-launch" },
+      { href: "/workspace/retail-plan", label: "Retail Plan", key: "retail-plan" },
     ],
   },
 };
