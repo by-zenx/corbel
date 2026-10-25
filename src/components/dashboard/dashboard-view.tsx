@@ -228,6 +228,7 @@ export function DashboardView() {
 
   useGSAP(() => {
     const isInitial = previousChannelRef.current === null;
+    const isReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const pill = channelPillRef.current;
     const tabs = containerRef.current?.querySelector<HTMLElement>(".db-bar .seg");
     const active = tabs?.querySelector<HTMLElement>('button[aria-selected="true"]');
