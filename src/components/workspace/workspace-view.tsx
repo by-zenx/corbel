@@ -1,9 +1,10 @@
 "use client";
 
-import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, Fragment, KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 import { Icon } from "@/components/icons/svg-sprite";
+import { ProgressMeter } from "@/components/ui/progress-meter";
 import {
   createInitialWorkspaceBoards,
   WORKSPACE_CHECKLISTS,
@@ -20,6 +21,33 @@ import {
 const STORAGE_KEY = "corbel:workspace:boards";
 const DAY = 24 * 60 * 60 * 1000;
 const FIXTURE_NOW = Date.UTC(2026, 9, 26, 12);
+
+interface WorkspaceDrag {
+  taskId: string;
+  pointerId: number;
+  x: number;
+  y: number;
+  originX: number;
+  originY: number;
+  tilt: number;
+  offsetX: number;
+  offsetY: number;
+  width: number;
+  height: number;
+  targetColumnId: WorkspaceColumnId | null;
+  beforeTaskId?: string;
+}
+
+interface PendingWorkspacePointer {
+  taskId: string;
+  pointerId: number;
+  startX: number;
+  startY: number;
+  offsetX: number;
+  offsetY: number;
+  width: number;
+  height: number;
+}
 
 function memberFor(initials: string) {
   return WORKSPACE_MEMBERS.find((member) => member.initials === initials) ?? WORKSPACE_MEMBERS[0];
@@ -93,6 +121,12 @@ export function WorkspaceView({ boardId }: { boardId: string }) {
   const ringAnimatedRef = useRef(false);
   const cardDialogRef = useRef<HTMLDialogElement>(null);
   const deleteDialogRef = useRef<HTMLDialogElement>(null);
+  const pointerRef = useRef<PendingWorkspacePointer | null>(null);
+  const dragRef = useRef<WorkspaceDrag | null>(null);
+  const dragPreviewRef = useRef<HTMLDivElement>(null);
+  const dragMotionRef = useRef<{ x: (value: number) => void; y: (value: number) => void; rotation: (value: number) => void } | null>(null);
+  const flipPositionsRef = useRef<Map<string, DOMRect> | null>(null);
+  const suppressClickRef = useRef(false);
   const [boards, setBoards] = useState<WorkspaceBoard[]>(createInitialWorkspaceBoards);
   const [now, setNow] = useState(FIXTURE_NOW);
   const [assigneeFilter, setAssigneeFilter] = useState<string | null>(null);
@@ -102,13 +136,14 @@ export function WorkspaceView({ boardId }: { boardId: string }) {
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dragPreview, setDragPreview] = useState<WorkspaceDrag | null>(null);
   const [notice, setNotice] = useState("");
 
   const board = boards.find((item) => item.id === boardId);
   const progress = board ? boardProgress(board) : { all: 0, done: 0, percent: 0 };
   const activeCard = board?.columns.flatMap((column) => column.cards).find((card) => card.id === activeCardId) ?? null;
   const activeColumn = board?.columns.find((column) => column.cards.some((card) => card.id === activeCardId)) ?? null;
+  const draggingTask = dragPreview ? board?.columns.flatMap((column) => column.cards).find((card) => card.id === dragPreview.taskId) ?? null : null;
   const visibleCards = useMemo(() => board?.columns.reduce((sum, column) => sum + column.cards.filter((card) => !assigneeFilter || card.who === assigneeFilter).length, 0) ?? 0, [board, assigneeFilter]);
 
   useEffect(() => {
@@ -160,7 +195,7 @@ export function WorkspaceView({ boardId }: { boardId: string }) {
     if (activeCard && !dialog.open) {
       dialog.showModal();
       if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-        gsap.fromTo(dialog.querySelector(".sheet__box"), { opacity: 0, x: 28 }, { opacity: 1, x: 0, duration: 0.42, ease: "power3.out" });
+        gsap.fromTo(dialog.querySelector(".sheet__box"), { opacity: 0, x: 24 }, { opacity: 1, x: 0, duration: 0.56, ease: "power3.out" });
       }
     } else if (!activeCard && dialog.open) dialog.close();
   }, [activeCardId, activeCard]);
@@ -197,6 +232,7 @@ export function WorkspaceView({ boardId }: { boardId: string }) {
 
   const moveTask = (taskId: string, targetColumnId: WorkspaceColumnId, beforeTaskId?: string) => {
     const firstPositions = new Map<string, DOMRect>();
+    const draggedFirstPosition = rootRef.current?.querySelector<HTMLElement>(".ws-drag-preview")?.getBoundingClientRect();
     rootRef.current?.querySelectorAll<HTMLElement>(".ws-card").forEach((card) => {
       if (card.dataset.id) firstPositions.set(card.dataset.id, card.getBoundingClientRect());
     });
@@ -218,7 +254,6 @@ export function WorkspaceView({ boardId }: { boardId: string }) {
       target.cards.splice(insertAt < 0 ? target.cards.length : insertAt, 0, moved);
       return { ...item, columns };
     }));
-    setDraggingId(null);
     if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       window.requestAnimationFrame(() => {
         firstPositions.forEach((first, id) => {
@@ -230,9 +265,131 @@ export function WorkspaceView({ boardId }: { boardId: string }) {
           if (Math.abs(x) < 1 && Math.abs(y) < 1) return;
           gsap.fromTo(card, { x, y }, { x: 0, y: 0, duration: 0.48, ease: "expo.out", clearProps: "transform" });
         });
+        if (draggedFirstPosition) {
+          const movedCard = rootRef.current?.querySelector<HTMLElement>(`.ws-card[data-id="${CSS.escape(taskId)}"]`);
+          if (movedCard) {
+            const last = movedCard.getBoundingClientRect();
+            gsap.fromTo(movedCard, { x: draggedFirstPosition.left - last.left, y: draggedFirstPosition.top - last.top, scale: 0.98 }, { x: 0, y: 0, scale: 1, duration: 0.42, ease: "power3.out", clearProps: "transform", overwrite: "auto" });
+          }
+        }
       });
     }
   };
+
+  useLayoutEffect(() => {
+    const firstPositions = flipPositionsRef.current;
+    if (!firstPositions) return;
+    flipPositionsRef.current = null;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    firstPositions.forEach((first, id) => {
+      const card = rootRef.current?.querySelector<HTMLElement>(`.ws-card[data-id="${CSS.escape(id)}"]`);
+      if (!card) return;
+      gsap.set(card, { clearProps: "transform" });
+      const last = card.getBoundingClientRect();
+      const x = first.left - last.left;
+      const y = first.top - last.top;
+      if (Math.abs(x) < 1 && Math.abs(y) < 1) return;
+      gsap.fromTo(card, { x, y }, { x: 0, y: 0, duration: 0.38, ease: "power3.out", clearProps: "transform", overwrite: "auto" });
+    });
+  }, [dragPreview?.targetColumnId, dragPreview?.beforeTaskId]);
+
+  useEffect(() => {
+    const onPointerMove = (event: PointerEvent) => {
+      const pending = pointerRef.current;
+      if (!pending || pending.pointerId !== event.pointerId) return;
+      const dx = event.clientX - pending.startX;
+      const dy = event.clientY - pending.startY;
+      let current = dragRef.current;
+      if (!current && Math.hypot(dx, dy) < 6) return;
+      if (!current) {
+        current = {
+          taskId: pending.taskId,
+          pointerId: pending.pointerId,
+          x: event.clientX,
+          y: event.clientY,
+          originX: pending.startX - pending.offsetX,
+          originY: pending.startY - pending.offsetY,
+          tilt: 0,
+          offsetX: pending.offsetX,
+          offsetY: pending.offsetY,
+          width: pending.width,
+          height: pending.height,
+          targetColumnId: null,
+        };
+      }
+      const columnElement = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>(".ws-col");
+      const targetColumnId = columnElement?.dataset.col as WorkspaceColumnId | undefined;
+      let beforeTaskId: string | undefined;
+      if (columnElement && targetColumnId) {
+        const cards = Array.from(columnElement.querySelectorAll<HTMLElement>(".ws-card"))
+          .filter((card) => card.dataset.id !== pending.taskId);
+        const hovered = cards.find((card) => {
+          const rect = card.getBoundingClientRect();
+          return event.clientY < rect.top + rect.height / 2;
+        });
+        if (hovered) beforeTaskId = hovered.dataset.id;
+      }
+      const placementChanged = !dragRef.current || current.targetColumnId !== (targetColumnId ?? null) || current.beforeTaskId !== beforeTaskId;
+      if (placementChanged) {
+        const firstPositions = new Map<string, DOMRect>();
+        rootRef.current?.querySelectorAll<HTMLElement>(".ws-card").forEach((card) => {
+          if (card.dataset.id && card.dataset.id !== pending.taskId) firstPositions.set(card.dataset.id, card.getBoundingClientRect());
+        });
+        flipPositionsRef.current = firstPositions;
+      }
+      const next: WorkspaceDrag = {
+        ...current,
+        x: event.clientX,
+        y: event.clientY,
+        tilt: Math.max(-5, Math.min(5, dx * 0.12)),
+        targetColumnId: targetColumnId ?? null,
+        beforeTaskId,
+      };
+      dragRef.current = next;
+      const preview = dragPreviewRef.current;
+      if (preview) {
+        const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        if (reducedMotion) {
+          gsap.set(preview, { x: dx, y: dy, rotation: 0 });
+        } else if (!dragMotionRef.current) {
+          dragMotionRef.current = {
+            x: gsap.quickTo(preview, "x", { duration: 0.14, ease: "power3.out" }),
+            y: gsap.quickTo(preview, "y", { duration: 0.14, ease: "power3.out" }),
+            rotation: gsap.quickTo(preview, "rotation", { duration: 0.12, ease: "power2.out" }),
+          };
+        }
+        if (!reducedMotion && dragMotionRef.current) {
+          dragMotionRef.current.x(dx);
+          dragMotionRef.current.y(dy);
+          dragMotionRef.current.rotation(Math.max(-5, Math.min(5, dx * 0.12)));
+        }
+      }
+      if (placementChanged) setDragPreview(next);
+      if (dragRef.current) event.preventDefault();
+    };
+    const onPointerUp = (event: PointerEvent) => {
+      const pending = pointerRef.current;
+      if (!pending || pending.pointerId !== event.pointerId) return;
+      const drag = dragRef.current;
+      if (drag) {
+        suppressClickRef.current = true;
+        if (drag.targetColumnId) moveTask(drag.taskId, drag.targetColumnId, drag.beforeTaskId);
+        window.setTimeout(() => { suppressClickRef.current = false; }, 0);
+      }
+      pointerRef.current = null;
+      dragRef.current = null;
+      dragMotionRef.current = null;
+      setDragPreview(null);
+    };
+    window.addEventListener("pointermove", onPointerMove, { passive: false });
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerUp);
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerUp);
+    };
+  }, [boards, boardId]);
 
   const moveWithinColumn = (taskId: string, direction: -1 | 1) => {
     const column = board?.columns.find((item) => item.cards.some((card) => card.id === taskId));
@@ -371,7 +528,7 @@ export function WorkspaceView({ boardId }: { boardId: string }) {
           {board.columns.map((column) => {
             const columnCards = column.cards.filter((card) => !assigneeFilter || card.who === assigneeFilter);
             return (
-              <section key={column.id} className={`ws-col${draggingId ? " is-drop-ready" : ""}`} data-col={column.id} aria-labelledby={`ws-h-${column.id}`} onDragOver={(event) => { if (draggingId) event.preventDefault(); }} onDrop={(event) => { event.preventDefault(); if (draggingId) moveTask(draggingId, column.id); }}>
+              <section key={column.id} className={`ws-col${dragPreview ? " is-drop-ready" : ""}${dragPreview?.targetColumnId === column.id ? " is-drop-target" : ""}`} data-col={column.id} aria-labelledby={`ws-h-${column.id}`}>
                 <header className="ws-col__head">
                   <span className={`ws-col__dot ws-col__dot--${column.id}`} aria-hidden="true" />
                   <h2 className="ws-col__name" id={`ws-h-${column.id}`}>{column.name}</h2>
@@ -379,12 +536,20 @@ export function WorkspaceView({ boardId }: { boardId: string }) {
                   <button className="icon-btn ws-col__plus" type="button" data-add={column.id} aria-label={`Add a card to ${column.name}`} onClick={() => { setNewTaskColumn(column.id); setNewTaskTag("Ops"); setNewTaskAssignee(assigneeFilter ?? "MR"); }}><Icon name="plus" /></button>
                 </header>
                 <ol className="ws-list" aria-label={`${column.name} cards`}>
-                  {columnCards.map((card) => {
+                  {columnCards.filter((card) => card.id !== dragPreview?.taskId).map((card, index, cards) => {
                     const assignee = memberFor(card.who);
                     const completion = card.checklist.length ? card.checklist.filter((item) => item.done).length / card.checklist.length : 0;
                     const isComplete = column.id === "done";
                     return (
-                      <li key={card.id} className={`ws-card${draggingId === card.id ? " is-dragging" : ""}`} data-id={card.id} draggable onDragStart={(event) => { setDraggingId(card.id); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", card.id); }} onDragEnd={() => setDraggingId(null)} onDragOver={(event) => { if (draggingId && draggingId !== card.id) event.preventDefault(); }} onDrop={(event) => { event.preventDefault(); event.stopPropagation(); const movedId = event.dataTransfer.getData("text/plain") || draggingId; if (movedId && movedId !== card.id) moveTask(movedId, column.id, card.id); }}>
+                      <Fragment key={card.id}>
+                      {dragPreview?.targetColumnId === column.id && dragPreview.beforeTaskId === card.id && <li className="ws-ph" aria-hidden="true" style={{ "--ws-ph-height": `${dragPreview.height}px` } as React.CSSProperties} />}
+                      <li className="ws-card" data-id={card.id} onPointerDown={(event) => {
+                        if (event.button !== 0 || (event.target as HTMLElement).closest("button:not(.ws-card__open), input, select, textarea, a, [role=menu]")) return;
+                        const rect = event.currentTarget.getBoundingClientRect();
+                        pointerRef.current = { taskId: card.id, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, offsetX: event.clientX - rect.left, offsetY: event.clientY - rect.top, width: rect.width, height: rect.height };
+                      }} onClickCapture={(event) => {
+                        if (suppressClickRef.current) { event.preventDefault(); event.stopPropagation(); }
+                      }}>
                         <span className="ws-card__lift" aria-hidden="true" />
                         <div className="ws-card__top">
                           <span className={`pill ws-tag ws-tag--${card.tag.toLowerCase()}`}>{card.tag}</span>
@@ -398,15 +563,18 @@ export function WorkspaceView({ boardId }: { boardId: string }) {
                           </div>}
                         </div>
                         <h3 className="ws-card__title"><button className="ws-card__open" type="button" onClick={() => setActiveCardId(card.id)}>{card.title}</button></h3>
-                        {card.checklist.length > 0 && <div className={`ws-card__check${completion === 1 ? " is-complete" : ""}`} title="Checklist"><span><Icon name="check" />{card.checklist.filter((item) => item.done).length}/{card.checklist.length}<span className="sr-only"> checklist items done</span></span><div className="meter"><div className="meter__fill" style={{ transform: `scaleX(${completion})` }} /></div></div>}
+                        {card.checklist.length > 0 && <div className={`ws-card__check${completion === 1 ? " is-complete" : ""}`} title="Checklist"><span><Icon name="check" />{card.checklist.filter((item) => item.done).length}/{card.checklist.length}<span className="sr-only"> checklist items done</span></span><div className="meter"><ProgressMeter value={completion} /></div></div>}
                         <div className="ws-card__foot">
                           <span title={assignee.name}><span className="av av--sm" style={{ "--h": assignee.hue } as React.CSSProperties}>{initials(assignee.name)}</span><span className="sr-only">Assigned to {assignee.name}</span></span>
                           <span className={`ws-due ${dueClass(card.due, now, isComplete)}`} title={dueDescription(card.due, now, isComplete)}><Icon name="clock" />{dueDescription(card.due, now, isComplete)}</span>
                           {card.comments.length > 0 && <span className="ws-card__com" title={`${card.comments.length} comments`}><Icon name="chat" />{card.comments.length}<span className="sr-only"> comments</span></span>}
                         </div>
                       </li>
+                      {dragPreview?.targetColumnId === column.id && !dragPreview.beforeTaskId && index === cards.length - 1 && <li className="ws-ph" aria-hidden="true" style={{ "--ws-ph-height": `${dragPreview.height}px` } as React.CSSProperties} />}
+                      </Fragment>
                     );
                   })}
+                  {dragPreview?.targetColumnId === column.id && !dragPreview.beforeTaskId && columnCards.every((card) => card.id === dragPreview.taskId) && <li className="ws-ph" aria-hidden="true" style={{ "--ws-ph-height": `${dragPreview.height}px` } as React.CSSProperties} />}
                 </ol>
                 {newTaskColumn === column.id ? <form className="ws-add" data-form={column.id} onSubmit={(event) => addTask(event, column)} onKeyDown={(event) => { if (event.key === "Escape") setNewTaskColumn(null); }}>
                   <label className="sr-only" htmlFor={`ws-t-${column.id}`}>Card title</label>
@@ -421,6 +589,12 @@ export function WorkspaceView({ boardId }: { boardId: string }) {
         <span className="sr-only" aria-live="polite">Showing {visibleCards} cards</span>
       </div>
 
+      {dragPreview && draggingTask && <div ref={dragPreviewRef} className="ws-drag-preview" aria-hidden="true" style={{ left: dragPreview.originX, top: dragPreview.originY, width: dragPreview.width, height: dragPreview.height }}>
+        <span className={`pill ws-tag ws-tag--${draggingTask.tag.toLowerCase()}`}>{draggingTask.tag}</span>
+        <b>{draggingTask.title}</b>
+        {draggingTask.checklist.length > 0 && <span className="ws-drag-preview__progress">{draggingTask.checklist.filter((item) => item.done).length}/{draggingTask.checklist.length}</span>}
+      </div>}
+
       <dialog ref={cardDialogRef} className="sheet" aria-label={activeCard ? `Card details: ${activeCard.title}` : "Card details"} onCancel={() => setActiveCardId(null)} onClose={() => setActiveCardId(null)} onClick={(event) => { if (event.target === cardDialogRef.current) setActiveCardId(null); }}>
         {activeCard && activeColumn && <div className="sheet__box">
           <header className="sheet__head"><h2 id="ws-s-title-head">Card details</h2><button className="icon-btn" type="button" aria-label="Close card details" onClick={() => setActiveCardId(null)}><Icon name="x" /></button></header>
@@ -433,7 +607,7 @@ export function WorkspaceView({ boardId }: { boardId: string }) {
               <div className="field"><label className="label" htmlFor="ws-s-due">Due date</label><input className="input" type="date" id="ws-s-due" value={dateInputValue(activeCard.due)} onChange={(event) => event.target.value && updateTask(activeCard.id, (task) => ({ ...task, due: dateFromInput(event.target.value) }))} /></div>
             </div>
             <section className="ws-sc__sec" aria-labelledby="ws-s-ch"><div className="ws-sc__h"><h3 id="ws-s-ch">Checklist</h3><span className="ws-sc__n">{activeCard.checklist.filter((item) => item.done).length}/{activeCard.checklist.length}</span></div>
-              <div className="meter"><div className="meter__fill" style={{ transform: `scaleX(${activeCard.checklist.length ? activeCard.checklist.filter((item) => item.done).length / activeCard.checklist.length : 0})` }} /></div>
+              <div className="meter"><ProgressMeter value={activeCard.checklist.length ? activeCard.checklist.filter((item) => item.done).length / activeCard.checklist.length : 0} /></div>
               <ul className="ws-sc__checks">{activeCard.checklist.map((item, index) => <li key={`${item.label}-${index}`}><label className="check ws-sc__item"><input type="checkbox" checked={item.done} onChange={(event) => updateTask(activeCard.id, (task) => ({ ...task, checklist: task.checklist.map((check, checkIndex) => checkIndex === index ? { ...check, done: event.target.checked } : check) }))} /><span>{item.label}</span></label></li>)}</ul>
               <form className="ws-sc__inline" onSubmit={addChecklistItem}><label className="sr-only" htmlFor="ws-s-item">New checklist item</label><input className="input" id="ws-s-item" name="item" placeholder="Add an item" maxLength={80} autoComplete="off" /><button className="btn btn--sm" type="submit">Add</button></form>
             </section>
