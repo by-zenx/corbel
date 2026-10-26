@@ -30,4 +30,7 @@ dialog.finder[open]::backdrop {
 .db-col__fill { transition: height 0.5s cubic-bezier(.2,.7,.2,1), background-color 0.25s; }
 .db-bar { margin-bottom: 16px; }
 .set-tabs { margin-bottom: 16px; }
-.subtabs__pill { inset: 3px auto 3px 3px; right: auto; will-change: transform, width; }
+.subtabs__pill { z-index: 2; inset: 0; border-radius: 999px; gap: 2px; padding: 4px; display: flex; position: absolute; pointer-events: none; will-change: clip-path; }
+.subtabs__pill > span { color: var(--text); font-size: var(--fs-md); white-space: nowrap; border-radius: 999px; align-items: center; gap: 6px; padding: 11px 15px; font-weight: 600; display: inline-flex; }
+
+.msg-side__content { display: flex; flex-direction: column; gap: 20px; min-height: 100%; }

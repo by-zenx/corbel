@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import gsap from "gsap";
@@ -25,6 +25,7 @@ export const MAIN_TABS: TabItem[] = [
 
 export function NavTabs() {
   const pathname = usePathname();
+  const [messageUnread, setMessageUnread] = useState(2);
   const trackRef = useRef<HTMLDivElement>(null);
   const pillRef = useRef<HTMLSpanElement>(null);
   const coordsRef = useRef<{ l: number; r: number } | null>(null);
@@ -34,6 +35,24 @@ export function NavTabs() {
   const activeTab = MAIN_TABS.find(
     (t) => t.route === currentSegment || t.groupedRoutes?.includes(currentSegment)
   );
+
+  useEffect(() => {
+    const refreshUnread = () => {
+      try {
+        const saved = localStorage.getItem("corbel:messages:threads");
+        if (!saved) return setMessageUnread(2);
+        const threads = JSON.parse(saved) as { unread?: boolean; done?: boolean }[];
+        setMessageUnread(threads.filter((thread) => thread.unread && !thread.done).length);
+      } catch { /* Keep the default count if storage is unavailable. */ }
+    };
+    refreshUnread();
+    window.addEventListener("corbel:messages-updated", refreshUnread);
+    window.addEventListener("storage", refreshUnread);
+    return () => {
+      window.removeEventListener("corbel:messages-updated", refreshUnread);
+      window.removeEventListener("storage", refreshUnread);
+    };
+  }, []);
 
   useEffect(() => {
     const track = trackRef.current;
@@ -123,7 +142,7 @@ export function NavTabs() {
               {tab.label}
               {tab.count !== undefined && (
                 <span className="tab__count" data-count={tab.route}>
-                  {tab.count}
+                  {tab.route === "messages" ? messageUnread : tab.count}
                 </span>
               )}
             </Link>
@@ -136,7 +155,7 @@ export function NavTabs() {
             <span key={tab.route}>
               {tab.label}
               {tab.count !== undefined && (
-                <span className="tab__count">{tab.count}</span>
+                <span className="tab__count">{tab.route === "messages" ? messageUnread : tab.count}</span>
               )}
             </span>
           ))}
