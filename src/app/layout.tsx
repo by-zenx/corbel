@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import Script from "next/script";
 import "@/styles/globals.css";
 import { SvgSprite } from "@/components/icons/svg-sprite";
 import { AppShell } from "@/components/shell/app-shell";
@@ -32,9 +31,7 @@ export default function RootLayout({
   return (
     <html lang="en" data-theme="light" data-palette="mono" suppressHydrationWarning>
       <head>
-        <Script
-          id="corbel-theme-bootstrap"
-          strategy="beforeInteractive"
+        <script
           dangerouslySetInnerHTML={{
             __html: `
               (function (d) {
